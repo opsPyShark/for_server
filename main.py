@@ -8,10 +8,16 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 from threading import Thread
 import logging
+import asyncio
 
 # Загрузка токена из .env файла
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_TOKEN')
+CHAT_ID = os.getenv('CHAT_ID')  # Убедитесь, что CHAT_ID также есть в .env
+
+# Проверка токена
+if not TOKEN:
+    raise ValueError("Telegram token is missing! Please set it in the .env file.")
 
 # Создание клиента Docker
 client = docker.from_env()
@@ -86,61 +92,68 @@ async def send_alerts(app):
     while True:
         if network_issues_detected:
             alert_message = "Обнаружены проблемы в сети!"
-            await app.bot.send_message(chat_id='YOUR_CHAT_ID', text=alert_message)
+            await app.bot.send_message(chat_id=CHAT_ID, text=alert_message)
             # Сброс флага после отправки уведомления
             network_issues_detected = False
+        await asyncio.sleep(10)  # Задержка между проверками
+
+async def send_startup_message(app, message):
+    # Отправка сообщения в Telegram о запуске
+    await app.bot.send_message(chat_id=CHAT_ID, text=message)
 
 def configure_firewall():
     try:
-        # Пример настройки iptables или ufw
-        subprocess.run(['sudo', 'ufw', 'enable'])
-        subprocess.run(['sudo', 'ufw', 'allow', '22'])  # SSH доступ
-        subprocess.run(['sudo', 'ufw', 'allow', '1194'])  # OpenVPN порт
-        subprocess.run(['sudo', 'ufw', 'default', 'deny', 'incoming'])  # Запрет входящих по умолчанию
-        subprocess.run(['sudo', 'ufw', 'default', 'allow', 'outgoing'])  # Разрешение исходящих по умолчанию
-    except Exception as e:
+        subprocess.run(['sudo', 'ufw', 'enable'], check=True)
+        subprocess.run(['sudo', 'ufw', 'allow', '22'], check=True)  # SSH доступ
+        subprocess.run(['sudo', 'ufw', 'allow', '1194'], check=True)  # OpenVPN порт
+        subprocess.run(['sudo', 'ufw', 'default', 'deny', 'incoming'], check=True)  # Запрет входящих по умолчанию
+        subprocess.run(['sudo', 'ufw', 'default', 'allow', 'outgoing'], check=True)  # Разрешение исходящих по умолчанию
+        logger.info("Брандмауэр настроен.")
+        return "Брандмауэр настроен."
+    except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка настройки брандмауэра: {e}')
+        return f'Ошибка настройки брандмауэра: {e}'
 
 def configure_shadowsocks():
     try:
-        # Запуск и настройка Shadowsocks
-        subprocess.run(['sudo', 'systemctl', 'enable', 'shadowsocks-libev'])
-        subprocess.run(['sudo', 'systemctl', 'start', 'shadowsocks-libev'])
+        subprocess.run(['sudo', 'systemctl', 'enable', 'shadowsocks-libev'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'start', 'shadowsocks-libev'], check=True)
         logger.info("Shadowsocks запущен и настроен.")
-    except Exception as e:
+        return "Shadowsocks запущен и настроен."
+    except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка настройки Shadowsocks: {e}')
+        return f'Ошибка настройки Shadowsocks: {e}'
 
 def configure_openvpn():
     try:
-        # Перезапуск службы OpenVPN для применения обновлений
-        subprocess.run(['sudo', 'systemctl', 'restart', 'openvpn'])
+        subprocess.run(['sudo', 'systemctl', 'restart', 'openvpn'], check=True)
         logger.info("OpenVPN перезапущен с новой конфигурацией.")
-    except Exception as e:
+        return "OpenVPN перезапущен с новой конфигурацией."
+    except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка настройки OpenVPN: {e}')
+        return f'Ошибка настройки OpenVPN: {e}'
 
 def update_system():
     try:
-        subprocess.run(['sudo', 'apt-get', 'update'])
-        subprocess.run(['sudo', 'apt-get', 'upgrade', '-y'])
+        subprocess.run(['sudo', 'apt-get', 'update'], check=True)
+        subprocess.run(['sudo', 'apt-get', 'upgrade', '-y'], check=True)
         logger.info("Система обновлена.")
-    except Exception as e:
+        return "Система обновлена."
+    except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка обновления системы: {e}')
+        return f'Ошибка обновления системы: {e}'
 
 def setup_fail2ban():
     try:
-        subprocess.run(['sudo', 'systemctl', 'enable', 'fail2ban'])
-        subprocess.run(['sudo', 'systemctl', 'start', 'fail2ban'])
+        subprocess.run(['sudo', 'systemctl', 'enable', 'fail2ban'], check=True)
+        subprocess.run(['sudo', 'systemctl', 'start', 'fail2ban'], check=True)
         logger.info("Fail2ban запущен и настроен.")
-    except Exception as e:
+        return "Fail2ban запущен и настроен."
+    except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка настройки Fail2ban: {e}')
+        return f'Ошибка настройки Fail2ban: {e}'
 
 async def main():
-    configure_firewall()
-    configure_shadowsocks()
-    configure_openvpn()
-    update_system()
-    setup_fail2ban()
-
     # Создание и запуск приложения
     app = Application.builder().token(TOKEN).build()
 
@@ -150,18 +163,30 @@ async def main():
     app.add_handler(CommandHandler("newvpn", new_vpn))
     app.add_handler(CommandHandler("status", status))
 
+    # Настройка и запуск служб
+    startup_messages = [
+        configure_firewall(),
+        configure_shadowsocks(),
+        configure_openvpn(),
+        update_system(),
+        setup_fail2ban()
+    ]
+
+    # Отправка сообщений о запуске
+    startup_message = "\n".join(startup_messages)
+    await send_startup_message(app, f"Сервер запущен:\n{startup_message}")
+
     # Запуск мониторинга сети в отдельном потоке
     monitor_thread = Thread(target=monitor_network)
     monitor_thread.daemon = True
     monitor_thread.start()
 
     # Запуск отправки оповещений в отдельном потоке
-    alert_thread = Thread(target=send_alerts, args=(app,))
+    alert_thread = Thread(target=asyncio.run, args=(send_alerts(app),))
     alert_thread.daemon = True
     alert_thread.start()
 
     await app.run_polling()
 
 if __name__ == '__main__':
-    import asyncio
     asyncio.run(main())
