@@ -140,11 +140,11 @@ def configure_openvpn():
         subprocess.run(['sudo', 'systemctl', 'restart', 'openvpn'], check=True)
         logger.info("OpenVPN перезапущен с новой конфигурацией.")
 
-        # Запуск скрипта restart.sh после перезапуска OpenVPN
-        subprocess.run(['/root/auto_opnvpn/restart.sh'], check=True)
-        logger.info("Скрипт restart.sh выполнен.")
+        # Запуск скрипта reset.sh после перезапуска OpenVPN
+        subprocess.run(['/root/auto_opnvpn/reset.sh'], check=True)
+        logger.info("Скрипт reset.sh выполнен.")
 
-        return "OpenVPN перезапущен с новой конфигурацией и скрипт restart.sh выполнен."
+        return "OpenVPN перезапущен с новой конфигурацией и скрипт reset.sh выполнен."
     except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка настройки OpenVPN: {e}')
         return f'Ошибка настройки OpenVPN: {e}'
