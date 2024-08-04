@@ -10,49 +10,49 @@ from dotenv import load_dotenv
 from threading import Thread
 import logging
 
-# Загрузка токена из .env файла
+# Load the token from the .env file
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 
-# Создание клиента Docker
+# Create a Docker client
 client = docker.from_env()
 
-# Настройка логирования
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Глобальные переменные для мониторинга
+# Global variable for network monitoring
 network_issues_detected = False
 
-# Функции бота
+# Bot functions
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я ваш серверный бот. Напишите /help для получения списка команд.')
+    update.message.reply_text('Hello! I am your server bot. Type /help to get a list of commands.')
 
 def help_command(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(
-        '/help - Список команд\n'
-        '/reboot - Перезагрузить сервер\n'
-        '/newvpn - Создать новое VPN-соединение\n'
-        '/status - Статус сервера'
+        '/help - List of commands\n'
+        '/reboot - Reboot the server\n'
+        '/newvpn - Create a new VPN connection\n'
+        '/status - Server status'
     )
 
 def reboot(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Перезагрузка сервера...')
+    update.message.reply_text('Rebooting the server...')
     subprocess.run(['sudo', 'reboot'])
 
 def new_vpn(update: Update, context: CallbackContext) -> None:
     try:
-        # Остановка текущего VPN
+        # Stop the current VPN
         containers = client.containers.list(all=True, filters={"ancestor": "xtrime/antizapret-vpn-docker"})
         for container in containers:
             container.stop()
             container.remove()
 
-        # Запуск нового VPN
+        # Start a new VPN
         client.containers.run("xtrime/antizapret-vpn-docker", detach=True)
-        update.message.reply_text('Новое VPN-соединение установлено.')
+        update.message.reply_text('A new VPN connection has been established.')
     except Exception as e:
-        update.message.reply_text(f'Ошибка при создании VPN: {e}')
+        update.message.reply_text(f'Error creating VPN: {e}')
 
 def status(update: Update, context: CallbackContext) -> None:
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -60,9 +60,9 @@ def status(update: Update, context: CallbackContext) -> None:
     disk = psutil.disk_usage('/')
 
     status_message = (
-        f"Загрузка ЦП: {cpu_usage}%\n"
-        f"Использование памяти: {memory.percent}%\n"
-        f"Свободное место на диске: {disk.percent}%"
+        f"CPU Load: {cpu_usage}%\n"
+        f"Memory Usage: {memory.percent}%\n"
+        f"Disk Free Space: {disk.percent}%"
     )
 
     update.message.reply_text(status_message)
@@ -73,69 +73,69 @@ def monitor_network():
     def packet_callback(packet):
         if IP in packet:
             ip_layer = packet[IP]
-            # Пример анализа: если TTL меньше 10, считаем подозрительным
+            # Example analysis: consider suspicious if TTL is less than 10
             if ip_layer.ttl < 10:
-                logger.warning(f"Обнаружен подозрительный пакет: {ip_layer.src} -> {ip_layer.dst}")
+                logger.warning(f"Suspicious packet detected: {ip_layer.src} -> {ip_layer.dst}")
                 network_issues_detected = True
 
-    # Запуск сниффера на фоне
+    # Start the sniffer in the background
     sniff(filter="ip", prn=packet_callback, store=0)
 
 def send_alerts():
+    global network_issues_detected
     updater = Updater(TOKEN)
     dispatcher = updater.dispatcher
 
     while True:
         if network_issues_detected:
-            alert_message = "Обнаружены проблемы в сети!"
+            alert_message = "Network issues detected!"
             dispatcher.bot.send_message(chat_id='YOUR_CHAT_ID', text=alert_message)
-            # Сброс флага после отправки уведомления
-            global network_issues_detected
+            # Reset the flag after sending the notification
             network_issues_detected = False
 
 def configure_firewall():
     try:
-        # Пример настройки iptables или ufw
+        # Example setup of iptables or ufw
         subprocess.run(['sudo', 'ufw', 'enable'])
-        subprocess.run(['sudo', 'ufw', 'allow', '22'])  # SSH доступ
-        subprocess.run(['sudo', 'ufw', 'allow', '1194'])  # OpenVPN порт
-        subprocess.run(['sudo', 'ufw', 'default', 'deny', 'incoming'])  # Запрет входящих по умолчанию
-        subprocess.run(['sudo', 'ufw', 'default', 'allow', 'outgoing'])  # Разрешение исходящих по умолчанию
+        subprocess.run(['sudo', 'ufw', 'allow', '22'])  # SSH access
+        subprocess.run(['sudo', 'ufw', 'allow', '1194'])  # OpenVPN port
+        subprocess.run(['sudo', 'ufw', 'default', 'deny', 'incoming'])  # Deny incoming by default
+        subprocess.run(['sudo', 'ufw', 'default', 'allow', 'outgoing'])  # Allow outgoing by default
     except Exception as e:
-        logger.error(f'Ошибка настройки брандмауэра: {e}')
+        logger.error(f'Firewall configuration error: {e}')
 
 def configure_shadowsocks():
     try:
-        # Запуск и настройка Shadowsocks
+        # Start and configure Shadowsocks
         subprocess.run(['sudo', 'systemctl', 'enable', 'shadowsocks-libev'])
         subprocess.run(['sudo', 'systemctl', 'start', 'shadowsocks-libev'])
-        logger.info("Shadowsocks запущен и настроен.")
+        logger.info("Shadowsocks is up and running.")
     except Exception as e:
-        logger.error(f'Ошибка настройки Shadowsocks: {e}')
+        logger.error(f'Shadowsocks configuration error: {e}')
 
 def configure_openvpn():
     try:
-        # Перезапуск службы OpenVPN для применения обновлений
+        # Restart OpenVPN service to apply updates
         subprocess.run(['sudo', 'systemctl', 'restart', 'openvpn'])
-        logger.info("OpenVPN перезапущен с новой конфигурацией.")
+        logger.info("OpenVPN restarted with the new configuration.")
     except Exception as e:
-        logger.error(f'Ошибка настройки OpenVPN: {e}')
+        logger.error(f'OpenVPN configuration error: {e}')
 
 def update_system():
     try:
         subprocess.run(['sudo', 'apt-get', 'update'])
         subprocess.run(['sudo', 'apt-get', 'upgrade', '-y'])
-        logger.info("Система обновлена.")
+        logger.info("System updated.")
     except Exception as e:
-        logger.error(f'Ошибка обновления системы: {e}')
+        logger.error(f'System update error: {e}')
 
 def setup_fail2ban():
     try:
         subprocess.run(['sudo', 'systemctl', 'enable', 'fail2ban'])
         subprocess.run(['sudo', 'systemctl', 'start', 'fail2ban'])
-        logger.info("Fail2ban запущен и настроен.")
+        logger.info("Fail2ban is set up and running.")
     except Exception as e:
-        logger.error(f'Ошибка настройки Fail2ban: {e}')
+        logger.error(f'Fail2ban setup error: {e}')
 
 def main() -> None:
     configure_firewall()
@@ -144,7 +144,7 @@ def main() -> None:
     update_system()
     setup_fail2ban()
 
-    # Создание и запуск бота
+    # Create and start the bot
     updater = Updater(TOKEN)
     dispatcher = updater.dispatcher
 
@@ -154,12 +154,12 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("newvpn", new_vpn))
     dispatcher.add_handler(CommandHandler("status", status))
 
-    # Запуск мониторинга сети в отдельном потоке
+    # Start network monitoring in a separate thread
     monitor_thread = Thread(target=monitor_network)
     monitor_thread.daemon = True
     monitor_thread.start()
 
-    # Запуск отправки оповещений в отдельном потоке
+    # Start sending alerts in a separate thread
     alert_thread = Thread(target=send_alerts)
     alert_thread.daemon = True
     alert_thread.start()
