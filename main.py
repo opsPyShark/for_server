@@ -2,70 +2,69 @@ import os
 import psutil
 import subprocess
 import docker
-import numpy as np
 from scapy.all import sniff, IP
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 from threading import Thread
 import logging
 
-# Load the token from the .env file
+# Загрузка токена из .env файла
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 
-# Create a Docker client
+# Создание клиента Docker
 client = docker.from_env()
 
-# Set up logging
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global variable for network monitoring
+# Глобальная переменная для мониторинга
 network_issues_detected = False
 
-# Bot functions
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Hello! I am your server bot. Type /help to get a list of commands.')
+# Функции бота
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text('Привет! Я ваш серверный бот. Напишите /help для получения списка команд.')
 
-def help_command(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text(
-        '/help - List of commands\n'
-        '/reboot - Reboot the server\n'
-        '/newvpn - Create a new VPN connection\n'
-        '/status - Server status'
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        '/help - Список команд\n'
+        '/reboot - Перезагрузить сервер\n'
+        '/newvpn - Создать новое VPN-соединение\n'
+        '/status - Статус сервера'
     )
 
-def reboot(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Rebooting the server...')
+async def reboot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text('Перезагрузка сервера...')
     subprocess.run(['sudo', 'reboot'])
 
-def new_vpn(update: Update, context: CallbackContext) -> None:
+async def new_vpn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        # Stop the current VPN
+        # Остановка текущего VPN
         containers = client.containers.list(all=True, filters={"ancestor": "xtrime/antizapret-vpn-docker"})
         for container in containers:
             container.stop()
             container.remove()
 
-        # Start a new VPN
+        # Запуск нового VPN
         client.containers.run("xtrime/antizapret-vpn-docker", detach=True)
-        update.message.reply_text('A new VPN connection has been established.')
+        await update.message.reply_text('Новое VPN-соединение установлено.')
     except Exception as e:
-        update.message.reply_text(f'Error creating VPN: {e}')
+        await update.message.reply_text(f'Ошибка при создании VPN: {e}')
 
-def status(update: Update, context: CallbackContext) -> None:
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cpu_usage = psutil.cpu_percent(interval=1)
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 
     status_message = (
-        f"CPU Load: {cpu_usage}%\n"
-        f"Memory Usage: {memory.percent}%\n"
-        f"Disk Free Space: {disk.percent}%"
+        f"Загрузка ЦП: {cpu_usage}%\n"
+        f"Использование памяти: {memory.percent}%\n"
+        f"Свободное место на диске: {disk.percent}%"
     )
 
-    update.message.reply_text(status_message)
+    await update.message.reply_text(status_message)
 
 def monitor_network():
     global network_issues_detected
@@ -73,99 +72,96 @@ def monitor_network():
     def packet_callback(packet):
         if IP in packet:
             ip_layer = packet[IP]
-            # Example analysis: consider suspicious if TTL is less than 10
+            # Пример анализа: если TTL меньше 10, считаем подозрительным
             if ip_layer.ttl < 10:
-                logger.warning(f"Suspicious packet detected: {ip_layer.src} -> {ip_layer.dst}")
+                logger.warning(f"Обнаружен подозрительный пакет: {ip_layer.src} -> {ip_layer.dst}")
                 network_issues_detected = True
 
-    # Start the sniffer in the background
+    # Запуск сниффера на фоне
     sniff(filter="ip", prn=packet_callback, store=0)
 
-def send_alerts():
+async def send_alerts(app):
     global network_issues_detected
-    updater = Updater(TOKEN)
-    dispatcher = updater.dispatcher
 
     while True:
         if network_issues_detected:
-            alert_message = "Network issues detected!"
-            dispatcher.bot.send_message(chat_id='YOUR_CHAT_ID', text=alert_message)
-            # Reset the flag after sending the notification
+            alert_message = "Обнаружены проблемы в сети!"
+            await app.bot.send_message(chat_id='YOUR_CHAT_ID', text=alert_message)
+            # Сброс флага после отправки уведомления
             network_issues_detected = False
 
 def configure_firewall():
     try:
-        # Example setup of iptables or ufw
+        # Пример настройки iptables или ufw
         subprocess.run(['sudo', 'ufw', 'enable'])
-        subprocess.run(['sudo', 'ufw', 'allow', '22'])  # SSH access
-        subprocess.run(['sudo', 'ufw', 'allow', '1194'])  # OpenVPN port
-        subprocess.run(['sudo', 'ufw', 'default', 'deny', 'incoming'])  # Deny incoming by default
-        subprocess.run(['sudo', 'ufw', 'default', 'allow', 'outgoing'])  # Allow outgoing by default
+        subprocess.run(['sudo', 'ufw', 'allow', '22'])  # SSH доступ
+        subprocess.run(['sudo', 'ufw', 'allow', '1194'])  # OpenVPN порт
+        subprocess.run(['sudo', 'ufw', 'default', 'deny', 'incoming'])  # Запрет входящих по умолчанию
+        subprocess.run(['sudo', 'ufw', 'default', 'allow', 'outgoing'])  # Разрешение исходящих по умолчанию
     except Exception as e:
-        logger.error(f'Firewall configuration error: {e}')
+        logger.error(f'Ошибка настройки брандмауэра: {e}')
 
 def configure_shadowsocks():
     try:
-        # Start and configure Shadowsocks
+        # Запуск и настройка Shadowsocks
         subprocess.run(['sudo', 'systemctl', 'enable', 'shadowsocks-libev'])
         subprocess.run(['sudo', 'systemctl', 'start', 'shadowsocks-libev'])
-        logger.info("Shadowsocks is up and running.")
+        logger.info("Shadowsocks запущен и настроен.")
     except Exception as e:
-        logger.error(f'Shadowsocks configuration error: {e}')
+        logger.error(f'Ошибка настройки Shadowsocks: {e}')
 
 def configure_openvpn():
     try:
-        # Restart OpenVPN service to apply updates
+        # Перезапуск службы OpenVPN для применения обновлений
         subprocess.run(['sudo', 'systemctl', 'restart', 'openvpn'])
-        logger.info("OpenVPN restarted with the new configuration.")
+        logger.info("OpenVPN перезапущен с новой конфигурацией.")
     except Exception as e:
-        logger.error(f'OpenVPN configuration error: {e}')
+        logger.error(f'Ошибка настройки OpenVPN: {e}')
 
 def update_system():
     try:
         subprocess.run(['sudo', 'apt-get', 'update'])
         subprocess.run(['sudo', 'apt-get', 'upgrade', '-y'])
-        logger.info("System updated.")
+        logger.info("Система обновлена.")
     except Exception as e:
-        logger.error(f'System update error: {e}')
+        logger.error(f'Ошибка обновления системы: {e}')
 
 def setup_fail2ban():
     try:
         subprocess.run(['sudo', 'systemctl', 'enable', 'fail2ban'])
         subprocess.run(['sudo', 'systemctl', 'start', 'fail2ban'])
-        logger.info("Fail2ban is set up and running.")
+        logger.info("Fail2ban запущен и настроен.")
     except Exception as e:
-        logger.error(f'Fail2ban setup error: {e}')
+        logger.error(f'Ошибка настройки Fail2ban: {e}')
 
-def main() -> None:
+async def main():
     configure_firewall()
     configure_shadowsocks()
     configure_openvpn()
     update_system()
     setup_fail2ban()
 
-    # Create and start the bot
-    updater = Updater(TOKEN)
-    dispatcher = updater.dispatcher
+    # Создание и запуск приложения
+    app = Application.builder().token(TOKEN).build()
 
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("reboot", reboot))
-    dispatcher.add_handler(CommandHandler("newvpn", new_vpn))
-    dispatcher.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("reboot", reboot))
+    app.add_handler(CommandHandler("newvpn", new_vpn))
+    app.add_handler(CommandHandler("status", status))
 
-    # Start network monitoring in a separate thread
+    # Запуск мониторинга сети в отдельном потоке
     monitor_thread = Thread(target=monitor_network)
     monitor_thread.daemon = True
     monitor_thread.start()
 
-    # Start sending alerts in a separate thread
-    alert_thread = Thread(target=send_alerts)
+    # Запуск отправки оповещений в отдельном потоке
+    alert_thread = Thread(target=send_alerts, args=(app,))
     alert_thread.daemon = True
     alert_thread.start()
 
-    updater.start_polling()
-    updater.idle()
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
