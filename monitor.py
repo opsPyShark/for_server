@@ -1,183 +1,116 @@
-import os
-import subprocess
-import sys
-import asyncio
+import telebot
 import psutil
-import requests
+import subprocess
+import time
+import os
 from dotenv import load_dotenv
-from telegram import Bot, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from ai import AIModel
-
-
-def install_requirements():
-    """Проверка и установка зависимостей из файла requirements.txt."""
-    # Проверяем, установлен ли pip3
-    try:
-        import pip
-    except ImportError:
-        print("pip не установлен. Установка pip...")
-        subprocess.check_call([sys.executable, "-m", "ensurepip", "--default-pip"])
-
-    # Проверка и установка зависимостей
-    try:
-        print("Проверка и установка зависимостей из requirements.txt...")
-        with open("requirements.txt", "r") as file:
-            required_packages = file.read().splitlines()
-
-        # Установим отсутствующие пакеты
-        installed_packages = subprocess.check_output([sys.executable, "-m", "pip", "freeze"])
-        installed_packages = installed_packages.decode().splitlines()
-        installed_packages = {pkg.split('==')[0] for pkg in installed_packages}
-
-        packages_to_install = [pkg for pkg in required_packages if pkg.split('==')[0] not in installed_packages]
-
-        if packages_to_install:
-            print(f"Установка отсутствующих пакетов: {packages_to_install}")
-            subprocess.check_call([sys.executable, "-m", "pip", "install"] + packages_to_install)
-        else:
-            print("Все зависимости уже установлены.")
-    except subprocess.CalledProcessError as e:
-        print(f"Ошибка при установке зависимостей: {e}")
-        sys.exit(1)
-
-
-# Установить зависимости перед импортом модулей
-install_requirements()
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# Получение токена и ID чата из переменных окружения
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+CHAT_ID = os.getenv('CHAT_ID')
 
-# Инициализация модели ИИ
-ai_model = AIModel()
+# Инициализация бота с использованием токена
+bot = telebot.TeleBot(BOT_TOKEN)
 
-
-async def send_telegram_message(bot: Bot, message, important=False):
-    """Отправка сообщения в Telegram."""
-    try:
-        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        if important:
-            print(f"Важное сообщение отправлено: {message}")
-        else:
-            print(f"Сообщение отправлено: {message}")
-    except Exception as e:
-        print(f"Ошибка отправки сообщения: {e}")
-
-
-def check_cpu_usage(threshold=80):
-    """Проверка загрузки процессора."""
+# Проверка состояния сервера
+def check_server_status():
     cpu_usage = psutil.cpu_percent(interval=1)
-    return cpu_usage, cpu_usage > threshold
+    memory_usage = psutil.virtual_memory().percent
+    disk_usage = psutil.disk_usage('/').percent
 
+    # Отправка сообщения, если нагрузка слишком высокая
+    if cpu_usage > 80 or memory_usage > 80 or disk_usage > 90:
+        bot.send_message(
+            CHAT_ID,
+            f"Warning: High resource usage detected!\nCPU: {cpu_usage}%\nMemory: {memory_usage}%\nDisk: {disk_usage}%"
+        )
 
-def check_memory_usage(threshold=80):
-    """Проверка использования памяти."""
-    memory = psutil.virtual_memory()
-    memory_usage = memory.percent
-    return memory_usage, memory_usage > threshold
-
-
-def check_disk_usage(threshold=80):
-    """Проверка использования диска."""
-    disk = psutil.disk_usage('/')
-    disk_usage = disk.percent
-    return disk_usage, disk_usage > threshold
-
-
-def check_network_latency(url="https://www.google.com"):
-    """Проверка сетевой задержки (пинга)."""
+# Обновление пакетов
+def update_packages():
     try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            return response.elapsed.total_seconds(), False
-        else:
-            return None, True
-    except requests.ConnectionError:
-        return None, True
+        subprocess.run(['sudo', 'apt', 'update'], check=True)
+        subprocess.run(['sudo', 'apt', 'upgrade', '-y'], check=True)
+        bot.send_message(CHAT_ID, "Packages updated successfully.")
+    except subprocess.CalledProcessError as e:
+        bot.send_message(CHAT_ID, f"Error updating packages: {e}")
 
+# Проверка состояния VPN
+def check_vpn_status():
+    try:
+        result = subprocess.run(['docker', 'ps'], stdout=subprocess.PIPE)
+        if 'antizapret-vpn-docker' not in result.stdout.decode():
+            bot.send_message(CHAT_ID, "VPN is not running!")
+            start_vpn()
+    except Exception as e:
+        bot.send_message(CHAT_ID, f"Error checking VPN status: {e}")
 
-async def monitor_system(bot):
-    """Мониторинг состояния системы."""
-    cpu_usage, cpu_alert = check_cpu_usage()
-    memory_usage, memory_alert = check_memory_usage()
-    disk_usage, disk_alert = check_disk_usage()
-    network_latency, network_alert = check_network_latency()
+def start_vpn():
+    try:
+        subprocess.run(['docker', 'start', 'antizapret-vpn-docker'], check=True)
+        bot.send_message(CHAT_ID, "VPN started successfully.")
+    except subprocess.CalledProcessError as e:
+        bot.send_message(CHAT_ID, f"Error starting VPN: {e}")
 
-    alerts = []
-    if cpu_alert:
-        alerts.append(f"Предупреждение: высокая загрузка процессора - {cpu_usage}%")
-    if memory_alert:
-        alerts.append(f"Предупреждение: высокое использование памяти - {memory_usage}%")
-    if disk_alert:
-        alerts.append(f"Предупреждение: высокое использование диска - {disk_usage}%")
-    if network_alert:
-        alerts.append("Ошибка сети: невозможно подключиться к интернету")
+# Настройка защиты от атак (например, с использованием ufw)
+def setup_firewall():
+    try:
+        subprocess.run(['sudo', 'ufw', 'enable'], check=True)
+        subprocess.run(['sudo', 'ufw', 'allow', '22'], check=True)  # SSH
+        subprocess.run(['sudo', 'ufw', 'allow', '1194/udp'], check=True)  # OpenVPN
+        subprocess.run(['sudo', 'ufw', 'default', 'deny'], check=True)
+        bot.send_message(CHAT_ID, "Firewall configured successfully.")
+    except subprocess.CalledProcessError as e:
+        bot.send_message(CHAT_ID, f"Error configuring firewall: {e}")
 
-    if alerts:
-        for alert in alerts:
-            await send_telegram_message(bot, alert, important=True)
-
-    # Отправка общего отчета в Telegram
-    report = (
-        f"Отчет о состоянии сервера:\n"
-        f"Загрузка процессора: {cpu_usage}%\n"
-        f"Использование памяти: {memory_usage}%\n"
-        f"Использование диска: {disk_usage}%\n"
-        f"Задержка сети: {network_latency} секунд\n"
-    )
-    await send_telegram_message(bot, report)
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправка справки."""
+# Команды бота
+@bot.message_handler(commands=['help'])
+def send_help(message):
     help_text = (
-        "/help - Показать это сообщение\n"
-        "/generate <text> - Сгенерировать текст на основе введенного текста\n"
-        "Мониторинг системы автоматически выполняется в фоновом режиме."
+        "/help - помощь\n"
+        "/term - режим терминала\n"
+        "/termoff - выключение режима терминала\n"
+        "/update - обновить пакеты\n"
+        "/status - проверить состояние сервера\n"
+        "/vpn - проверить VPN\n"
     )
-    await update.message.reply_text(help_text)
+    bot.send_message(message.chat.id, help_text)
 
+@bot.message_handler(commands=['term'])
+def start_terminal(message):
+    bot.send_message(message.chat.id, "Terminal mode enabled.")
+    # Реализация терминального режима
 
-async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Генерация текста с использованием модели ИИ."""
-    if not context.args:
-        await update.message.reply_text("Пожалуйста, введите текст для генерации.")
-        return
+@bot.message_handler(commands=['termoff'])
+def stop_terminal(message):
+    bot.send_message(message.chat.id, "Terminal mode disabled.")
+    # Выключение терминального режима
 
-    input_text = ' '.join(context.args)
-    generated_text = ai_model.generate_text(input_text)
+@bot.message_handler(commands=['update'])
+def update_cmd(message):
+    bot.send_message(message.chat.id, "Updating packages...")
+    update_packages()
 
-    await update.message.reply_text(f"Сгенерированный текст:\n{generated_text}")
+@bot.message_handler(commands=['status'])
+def status_cmd(message):
+    check_server_status()
+    bot.send_message(message.chat.id, "Server status checked.")
 
+@bot.message_handler(commands=['vpn'])
+def vpn_cmd(message):
+    check_vpn_status()
 
-async def start_monitoring():
-    """Основная функция для инициализации и запуска бота."""
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+# Основной цикл
+def main():
+    setup_firewall()
+    bot.polling(none_stop=True)
+    while True:
+        check_server_status()
+        check_vpn_status()
+        update_packages()
+        time.sleep(3600)  # Проверка каждый час
 
-    # Добавление обработчиков команд
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("generate", generate_command))
-
-    # Запуск приложения
-    await application.initialize()
-    await application.start()
-
-    # Получение бота для отправки сообщений
-    bot = Bot(token=TELEGRAM_TOKEN)
-
-    # Запуск циклического мониторинга каждые 5 минут
-    async def periodic_monitoring():
-        while True:
-            await monitor_system(bot)
-            await asyncio.sleep(300)  # 5 минут
-
-    # Запуск бота и мониторинга параллельно
-    await asyncio.gather(application.updater.start_polling(), periodic_monitoring())
-
-
-if __name__ == "__main__":
-    print("Мониторинг сервера запущен.")
-    asyncio.run(start_monitoring())
+if __name__ == '__main__':
+    main()
