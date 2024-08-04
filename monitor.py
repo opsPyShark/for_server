@@ -1,6 +1,12 @@
 import os
 import sys
 import subprocess
+import requests
+import telebot
+import psutil
+import time
+from dotenv import load_dotenv
+
 
 # Функция для установки зависимостей
 def install_dependencies():
@@ -11,13 +17,9 @@ def install_dependencies():
         print(f"Error installing dependencies: {e}")
         sys.exit(1)
 
+
 # Установка зависимостей перед запуском основного кода
 install_dependencies()
-
-import telebot
-import psutil
-import time
-from dotenv import load_dotenv
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
@@ -34,18 +36,33 @@ if not BOT_TOKEN or not CHAT_ID:
 # Инициализация бота с использованием токена
 bot = telebot.TeleBot(BOT_TOKEN)
 
+# Переменная для хранения состояния терминального режима
+terminal_mode = False
+
+
 # Проверка состояния сервера
-def check_server_status():
+def get_server_status():
     cpu_usage = psutil.cpu_percent(interval=1)
     memory_usage = psutil.virtual_memory().percent
     disk_usage = psutil.disk_usage('/').percent
 
-    # Отправка сообщения, если нагрузка слишком высокая
-    if cpu_usage > 80 or memory_usage > 80 or disk_usage > 90:
-        bot.send_message(
-            CHAT_ID,
-            f"Warning: High resource usage detected!\nCPU: {cpu_usage}%\nMemory: {memory_usage}%\nDisk: {disk_usage}%"
-        )
+    # Проверка интернет-соединения
+    try:
+        requests.get("http://www.google.com", timeout=5)
+        internet_status = "Connected"
+    except requests.ConnectionError:
+        internet_status = "Disconnected"
+
+    status_message = (
+        f"Server Status:\n"
+        f"CPU Usage: {cpu_usage}%\n"
+        f"Memory Usage: {memory_usage}%\n"
+        f"Disk Usage: {disk_usage}%\n"
+        f"Internet Connection: {internet_status}"
+    )
+
+    return status_message
+
 
 # Обновление пакетов
 def update_packages():
@@ -55,6 +72,7 @@ def update_packages():
         bot.send_message(CHAT_ID, "Packages updated successfully.")
     except subprocess.CalledProcessError as e:
         bot.send_message(CHAT_ID, f"Error updating packages: {e}")
+
 
 # Проверка состояния VPN
 def check_vpn_status():
@@ -66,12 +84,14 @@ def check_vpn_status():
     except Exception as e:
         bot.send_message(CHAT_ID, f"Error checking VPN status: {e}")
 
+
 def start_vpn():
     try:
         subprocess.run(['docker', 'start', 'antizapret-vpn-docker'], check=True)
         bot.send_message(CHAT_ID, "VPN started successfully.")
     except subprocess.CalledProcessError as e:
         bot.send_message(CHAT_ID, f"Error starting VPN: {e}")
+
 
 # Настройка защиты от атак (например, с использованием ufw)
 def setup_firewall():
@@ -84,6 +104,7 @@ def setup_firewall():
         bot.send_message(CHAT_ID, "Firewall configured successfully.")
     except subprocess.CalledProcessError as e:
         bot.send_message(CHAT_ID, f"Error configuring firewall: {e}")
+
 
 # Команды бота
 @bot.message_handler(commands=['help'])
@@ -98,39 +119,58 @@ def send_help(message):
     )
     bot.send_message(message.chat.id, help_text)
 
+
 @bot.message_handler(commands=['term'])
 def start_terminal(message):
+    global terminal_mode
+    terminal_mode = True
     bot.send_message(message.chat.id, "Terminal mode enabled.")
-    # Реализация терминального режима
+
 
 @bot.message_handler(commands=['termoff'])
 def stop_terminal(message):
+    global terminal_mode
+    terminal_mode = False
     bot.send_message(message.chat.id, "Terminal mode disabled.")
-    # Выключение терминального режима
+
 
 @bot.message_handler(commands=['update'])
 def update_cmd(message):
     bot.send_message(message.chat.id, "Updating packages...")
     update_packages()
 
+
 @bot.message_handler(commands=['status'])
 def status_cmd(message):
-    check_server_status()
-    bot.send_message(message.chat.id, "Server status checked.")
+    status_message = get_server_status()
+    bot.send_message(message.chat.id, status_message)
+
 
 @bot.message_handler(commands=['vpn'])
 def vpn_cmd(message):
     check_vpn_status()
 
+
+@bot.message_handler(func=lambda message: True)
+def handle_terminal_commands(message):
+    global terminal_mode
+    if terminal_mode:
+        try:
+            # Выполнение команды, отправленной в Telegram
+            result = subprocess.run(message.text, shell=True, capture_output=True, text=True)
+            if result.stdout:
+                bot.send_message(message.chat.id, f"Output:\n{result.stdout}")
+            if result.stderr:
+                bot.send_message(message.chat.id, f"Error:\n{result.stderr}")
+        except Exception as e:
+            bot.send_message(message.chat.id, f"Failed to execute command: {e}")
+
+
 # Основной цикл
 def main():
     setup_firewall()
     bot.polling(none_stop=True)
-    while True:
-        check_server_status()
-        check_vpn_status()
-        update_packages()
-        time.sleep(3600)  # Проверка каждый час
+
 
 if __name__ == '__main__':
     main()
