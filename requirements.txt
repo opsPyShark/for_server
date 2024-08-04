@@ -2,3 +2,5 @@ psutil
 requests
 python-dotenv
 python-telegram-bot
+transformers
+torch
