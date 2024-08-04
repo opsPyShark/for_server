@@ -1,23 +1,26 @@
-import os
 import subprocess
 import sys
-import psutil
-import requests
-from dotenv import load_dotenv
-from telegram import Bot
 
 # Функция для установки пакетов
 def install_requirements():
     """Установка зависимостей из файла requirements.txt."""
     try:
+        print("Установка зависимостей из requirements.txt...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
         print("Зависимости установлены успешно.")
     except subprocess.CalledProcessError as e:
         print(f"Ошибка при установке зависимостей: {e}")
         sys.exit(1)
 
-# Установить зависимости
+# Установить зависимости перед импортом модулей
 install_requirements()
+
+# Теперь можно импортировать необходимые модули
+import os
+import psutil
+import requests
+from dotenv import load_dotenv
+from telegram import Bot
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
