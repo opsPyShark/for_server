@@ -71,7 +71,6 @@ def monitor_network():
     global network_issues_detected
 
     def packet_callback(packet):
-        nonlocal network_issues_detected
         if IP in packet:
             ip_layer = packet[IP]
             # Пример анализа: если TTL меньше 10, считаем подозрительным
@@ -90,6 +89,8 @@ def send_alerts():
         if network_issues_detected:
             alert_message = "Обнаружены проблемы в сети!"
             dispatcher.bot.send_message(chat_id='YOUR_CHAT_ID', text=alert_message)
+            # Сброс флага после отправки уведомления
+            global network_issues_detected
             network_issues_detected = False
 
 def configure_firewall():
