@@ -29,9 +29,11 @@ logger = logging.getLogger(__name__)
 # Глобальная переменная для мониторинга
 network_issues_detected = False
 
+
 # Функции бота
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('Привет! Я ваш серверный бот. Напишите /help для получения списка команд.')
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
@@ -41,9 +43,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         '/status - Статус сервера'
     )
 
+
 async def reboot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text('Перезагрузка сервера...')
     subprocess.run(['sudo', 'reboot'])
+
 
 async def new_vpn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -59,6 +63,7 @@ async def new_vpn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         await update.message.reply_text(f'Ошибка при создании VPN: {e}')
 
+
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cpu_usage = psutil.cpu_percent(interval=1)
     memory = psutil.virtual_memory()
@@ -71,6 +76,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     await update.message.reply_text(status_message)
+
 
 def monitor_network():
     global network_issues_detected
@@ -86,6 +92,7 @@ def monitor_network():
     # Запуск сниффера на фоне
     sniff(filter="ip", prn=packet_callback, store=0)
 
+
 async def send_alerts(app):
     global network_issues_detected
 
@@ -97,9 +104,11 @@ async def send_alerts(app):
             network_issues_detected = False
         await asyncio.sleep(10)  # Задержка между проверками
 
+
 async def send_startup_message(app, message):
     # Отправка сообщения в Telegram о запуске
     await app.bot.send_message(chat_id=CHAT_ID, text=message)
+
 
 def configure_firewall():
     try:
@@ -114,6 +123,7 @@ def configure_firewall():
         logger.error(f'Ошибка настройки брандмауэра: {e}')
         return f'Ошибка настройки брандмауэра: {e}'
 
+
 def configure_shadowsocks():
     try:
         subprocess.run(['sudo', 'systemctl', 'enable', 'shadowsocks-libev'], check=True)
@@ -124,14 +134,21 @@ def configure_shadowsocks():
         logger.error(f'Ошибка настройки Shadowsocks: {e}')
         return f'Ошибка настройки Shadowsocks: {e}'
 
+
 def configure_openvpn():
     try:
         subprocess.run(['sudo', 'systemctl', 'restart', 'openvpn'], check=True)
         logger.info("OpenVPN перезапущен с новой конфигурацией.")
-        return "OpenVPN перезапущен с новой конфигурацией."
+
+        # Запуск скрипта restart.sh после перезапуска OpenVPN
+        subprocess.run(['/root/auto_opnvpn/restart.sh'], check=True)
+        logger.info("Скрипт restart.sh выполнен.")
+
+        return "OpenVPN перезапущен с новой конфигурацией и скрипт restart.sh выполнен."
     except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка настройки OpenVPN: {e}')
         return f'Ошибка настройки OpenVPN: {e}'
+
 
 def update_system():
     try:
@@ -143,6 +160,7 @@ def update_system():
         logger.error(f'Ошибка обновления системы: {e}')
         return f'Ошибка обновления системы: {e}'
 
+
 def setup_fail2ban():
     try:
         subprocess.run(['sudo', 'systemctl', 'enable', 'fail2ban'], check=True)
@@ -152,6 +170,7 @@ def setup_fail2ban():
     except subprocess.CalledProcessError as e:
         logger.error(f'Ошибка настройки Fail2ban: {e}')
         return f'Ошибка настройки Fail2ban: {e}'
+
 
 async def main():
     # Создание и запуск приложения
@@ -182,11 +201,13 @@ async def main():
     monitor_thread.start()
 
     # Запуск отправки оповещений в отдельном потоке
-    alert_thread = Thread(target=asyncio.run, args=(send_alerts(app),))
-    alert_thread.daemon = True
-    alert_thread.start()
+    asyncio.create_task(send_alerts(app))
 
     await app.run_polling()
 
+
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        logger.error(f'Ошибка в главной функции: {e}')
