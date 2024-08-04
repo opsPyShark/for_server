@@ -11,11 +11,11 @@ CHAT_ID = os.getenv('CHAT_ID')
 # Инициализация бота
 bot = Bot(token=BOT_TOKEN)
 
-def send_alert(message):
+async def send_alert(message):
     """
-    Отправляет уведомление в Telegram.
+    Асинхронно отправляет уведомление в Telegram.
     """
     if BOT_TOKEN and CHAT_ID:
-        bot.send_message(chat_id=CHAT_ID, text=message)
+        await bot.send_message(chat_id=CHAT_ID, text=message)
     else:
         print("Ошибка: Не удалось отправить сообщение. Проверьте BOT_TOKEN и CHAT_ID в .env файле.")
