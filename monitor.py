@@ -1,8 +1,23 @@
 import os
+import subprocess
+import sys
 import psutil
 import requests
 from dotenv import load_dotenv
 from telegram import Bot
+
+# Функция для установки пакетов
+def install_requirements():
+    """Установка зависимостей из файла requirements.txt."""
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        print("Зависимости установлены успешно.")
+    except subprocess.CalledProcessError as e:
+        print(f"Ошибка при установке зависимостей: {e}")
+        sys.exit(1)
+
+# Установить зависимости
+install_requirements()
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
