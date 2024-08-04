@@ -1,6 +1,9 @@
 import requests
+import logging
 from monitor.telegram_notifier import send_alert
 
+# Инициализация логирования
+logger = logging.getLogger(__name__)
 
 def monitor_server():
     """
@@ -12,13 +15,26 @@ def monitor_server():
 
         # Проверка кода состояния
         if response.status_code != 200:
-            send_alert(f'Сервер вернул недопустимый код состояния: {response.status_code}')
+            message = f'Сервер вернул недопустимый код состояния: {response.status_code}'
+            logger.error(message)
+            send_alert(message)
+        else:
+            # Отправляем уведомление о запуске и нормальной работе
+            message = f'Бот запущен. Состояние сервера: {response.status_code}'
+            logger.info(message)
+            send_alert(message)
 
         # Дополнительные проверки (например, на наличие ключевых слов в ответе)
         if 'error' in response.text.lower():
-            send_alert('Обнаружена ошибка в ответе сервера!')
+            message = 'Обнаружена ошибка в ответе сервера!'
+            logger.error(message)
+            send_alert(message)
 
     except requests.exceptions.Timeout:
-        send_alert('Превышено время ожидания ответа от сервера!')
+        message = 'Превышено время ожидания ответа от сервера!'
+        logger.error(message)
+        send_alert(message)
     except requests.exceptions.RequestException as e:
-        send_alert(f'Ошибка при проверке сервера: {e}')
+        message = f'Ошибка при проверке сервера: {e}'
+        logger.error(message)
+        send_alert(message)
