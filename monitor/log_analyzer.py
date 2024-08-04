@@ -4,9 +4,9 @@ from monitor.telegram_notifier import send_alert
 
 LOG_FILE = 'server_monitor.log'
 
-def analyze_logs():
+async def analyze_logs():
     """
-    Анализирует логи и отправляет уведомления о найденных ошибках.
+    Асинхронно анализирует логи и отправляет уведомления о найденных ошибках.
     """
     if not os.path.exists(LOG_FILE):
         return
@@ -18,7 +18,7 @@ def analyze_logs():
 
     if errors:
         message = "Обнаружены ошибки в логах:\n" + "".join(errors[-5:])  # Отправляем последние 5 ошибок
-        send_alert(message)
+        await send_alert(message)  # Используйте await для асинхронного вызова
 
 def setup_logging():
     """

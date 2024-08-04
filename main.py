@@ -40,7 +40,7 @@ async def main():
 
     # Выполнение мониторинга сервера и анализа логов
     await monitor_server()
-    analyze_logs()
+    await analyze_logs()  # Используйте await для асинхронного вызова
 
     # Поддержка работы приложения до остановки
     await application.idle()
