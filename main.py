@@ -1,3 +1,4 @@
+import os
 import logging
 import asyncio
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
@@ -40,3 +41,4 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
