@@ -11,7 +11,9 @@ from file_manager import FileManager  # Импортируем класс для
 # Функция для установки зависимостей
 def install_dependencies():
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "--upgrade", "pip"])  # Обновление pip
+        # Обновление pip
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+        # Установка зависимостей из файла requirements.txt
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
     except subprocess.CalledProcessError as e:
         print(f"Error installing dependencies: {e}")
