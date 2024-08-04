@@ -10,9 +10,10 @@ from telegram.ext import (
     ContextTypes
 )
 
-# Загрузка переменных окружения
+# Загрузка переменных окружения из файла .env
 load_dotenv()
 
+# Получение токенов и идентификатора чата из переменных окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
 
