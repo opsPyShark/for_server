@@ -7,7 +7,7 @@ import requests
 from dotenv import load_dotenv
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from transformers import pipeline
+from ai import AIModel
 
 
 def install_requirements():
@@ -51,8 +51,8 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Инициализация модели GPT-2
-text_generator = pipeline("text-generation", model="gpt2")
+# Инициализация модели ИИ
+ai_model = AIModel()
 
 
 async def send_telegram_message(bot: Bot, message, important=False):
@@ -148,8 +148,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     input_text = ' '.join(context.args)
-    response = text_generator(input_text, max_length=50, num_return_sequences=1)
-    generated_text = response[0]['generated_text']
+    generated_text = ai_model.generate_text(input_text)
 
     await update.message.reply_text(f"Сгенерированный текст:\n{generated_text}")
 
