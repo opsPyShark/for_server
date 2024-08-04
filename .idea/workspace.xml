@@ -29,6 +29,7 @@
   <component name="ProjectId" id="2kBlOOZ5JPIyzX2jaU8r1JIYn61" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true">
     <ConfirmationsSetting value="1" id="Add" />
+    <ConfirmationsSetting value="2" id="Remove" />
   </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />

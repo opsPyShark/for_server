@@ -1,16 +1,26 @@
 import subprocess
 import sys
 
-# Функция для установки пакетов
+
 def install_requirements():
     """Установка зависимостей из файла requirements.txt."""
+    # Проверяем, установлен ли pip3
+    try:
+        import pip
+    except ImportError:
+        print("pip не установлен. Установка pip...")
+        subprocess.check_call([sys.executable, "-m", "ensurepip", "--default-pip"])
+
+    # Установка зависимостей из requirements.txt
     try:
         print("Установка зависимостей из requirements.txt...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
         print("Зависимости установлены успешно.")
     except subprocess.CalledProcessError as e:
         print(f"Ошибка при установке зависимостей: {e}")
         sys.exit(1)
+
 
 # Установить зависимости перед импортом модулей
 install_requirements()
@@ -31,6 +41,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 # Инициализация бота
 bot = Bot(token=TELEGRAM_TOKEN)
 
+
 def send_telegram_message(message, important=False):
     """Отправка сообщения в Telegram."""
     try:
@@ -42,6 +53,7 @@ def send_telegram_message(message, important=False):
     except Exception as e:
         print(f"Ошибка отправки сообщения: {e}")
 
+
 def check_cpu_usage(threshold=80):
     """Проверка загрузки процессора."""
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -49,6 +61,7 @@ def check_cpu_usage(threshold=80):
         message = f"Предупреждение: высокая загрузка процессора - {cpu_usage}%"
         send_telegram_message(message, important=True)
     return cpu_usage
+
 
 def check_memory_usage(threshold=80):
     """Проверка использования памяти."""
@@ -59,6 +72,7 @@ def check_memory_usage(threshold=80):
         send_telegram_message(message, important=True)
     return memory_usage
 
+
 def check_disk_usage(threshold=80):
     """Проверка использования диска."""
     disk = psutil.disk_usage('/')
@@ -67,6 +81,7 @@ def check_disk_usage(threshold=80):
         message = f"Предупреждение: высокое использование диска - {disk_usage}%"
         send_telegram_message(message, important=True)
     return disk_usage
+
 
 def check_network_latency(url="https://www.google.com"):
     """Проверка сетевой задержки (пинга)."""
@@ -80,6 +95,7 @@ def check_network_latency(url="https://www.google.com"):
     except requests.ConnectionError:
         message = f"Ошибка сети: невозможно подключиться к {url}"
         send_telegram_message(message, important=True)
+
 
 def main():
     # Отправка уведомления о запуске мониторинга
@@ -99,6 +115,7 @@ def main():
         f"Использование диска: {disk_usage}%\n"
     )
     send_telegram_message(report)
+
 
 if __name__ == "__main__":
     main()
