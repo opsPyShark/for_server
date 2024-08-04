@@ -7,6 +7,8 @@ import requests
 from dotenv import load_dotenv
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from transformers import pipeline
+
 
 def install_requirements():
     """Проверка и установка зависимостей из файла requirements.txt."""
@@ -39,6 +41,7 @@ def install_requirements():
         print(f"Ошибка при установке зависимостей: {e}")
         sys.exit(1)
 
+
 # Установить зависимости перед импортом модулей
 install_requirements()
 
@@ -47,6 +50,10 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+# Инициализация модели GPT-2
+text_generator = pipeline("text-generation", model="gpt2")
+
 
 async def send_telegram_message(bot: Bot, message, important=False):
     """Отправка сообщения в Telegram."""
@@ -59,10 +66,12 @@ async def send_telegram_message(bot: Bot, message, important=False):
     except Exception as e:
         print(f"Ошибка отправки сообщения: {e}")
 
+
 def check_cpu_usage(threshold=80):
     """Проверка загрузки процессора."""
     cpu_usage = psutil.cpu_percent(interval=1)
     return cpu_usage, cpu_usage > threshold
+
 
 def check_memory_usage(threshold=80):
     """Проверка использования памяти."""
@@ -70,11 +79,13 @@ def check_memory_usage(threshold=80):
     memory_usage = memory.percent
     return memory_usage, memory_usage > threshold
 
+
 def check_disk_usage(threshold=80):
     """Проверка использования диска."""
     disk = psutil.disk_usage('/')
     disk_usage = disk.percent
     return disk_usage, disk_usage > threshold
+
 
 def check_network_latency(url="https://www.google.com"):
     """Проверка сетевой задержки (пинга)."""
@@ -86,6 +97,7 @@ def check_network_latency(url="https://www.google.com"):
             return None, True
     except requests.ConnectionError:
         return None, True
+
 
 async def monitor_system(bot):
     """Мониторинг состояния системы."""
@@ -118,13 +130,29 @@ async def monitor_system(bot):
     )
     await send_telegram_message(bot, report)
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка справки."""
     help_text = (
         "/help - Показать это сообщение\n"
+        "/generate <text> - Сгенерировать текст на основе введенного текста\n"
         "Мониторинг системы автоматически выполняется в фоновом режиме."
     )
     await update.message.reply_text(help_text)
+
+
+async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Генерация текста с использованием модели ИИ."""
+    if not context.args:
+        await update.message.reply_text("Пожалуйста, введите текст для генерации.")
+        return
+
+    input_text = ' '.join(context.args)
+    response = text_generator(input_text, max_length=50, num_return_sequences=1)
+    generated_text = response[0]['generated_text']
+
+    await update.message.reply_text(f"Сгенерированный текст:\n{generated_text}")
+
 
 async def start_monitoring():
     """Основная функция для инициализации и запуска бота."""
@@ -132,6 +160,11 @@ async def start_monitoring():
 
     # Добавление обработчиков команд
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("generate", generate_command))
+
+    # Запуск приложения
+    await application.initialize()
+    await application.start()
 
     # Получение бота для отправки сообщений
     bot = Bot(token=TELEGRAM_TOKEN)
@@ -143,7 +176,8 @@ async def start_monitoring():
             await asyncio.sleep(300)  # 5 минут
 
     # Запуск бота и мониторинга параллельно
-    await asyncio.gather(application.start(), periodic_monitoring())
+    await asyncio.gather(application.updater.start_polling(), periodic_monitoring())
+
 
 if __name__ == "__main__":
     print("Мониторинг сервера запущен.")
