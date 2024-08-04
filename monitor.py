@@ -5,6 +5,7 @@ import subprocess
 # Функция для установки зависимостей
 def install_dependencies():
     try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])  # Обновление pip
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
     except subprocess.CalledProcessError as e:
         print(f"Error installing dependencies: {e}")
