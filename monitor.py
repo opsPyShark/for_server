@@ -50,7 +50,7 @@ def check_server_status():
 # Обновление пакетов
 def update_packages():
     try:
-        subprocess.run(['sudo', 'apt', 'update'], check=True)
+        subprocess.run(['sudo', 'apt', 'update', '-y'], check=True)
         subprocess.run(['sudo', 'apt', 'upgrade', '-y'], check=True)
         bot.send_message(CHAT_ID, "Packages updated successfully.")
     except subprocess.CalledProcessError as e:
@@ -76,7 +76,8 @@ def start_vpn():
 # Настройка защиты от атак (например, с использованием ufw)
 def setup_firewall():
     try:
-        subprocess.run(['sudo', 'ufw', 'enable'], check=True)
+        # Автоматическое подтверждение изменений в ufw
+        subprocess.run(['sudo', 'ufw', '--force', 'enable'], check=True)
         subprocess.run(['sudo', 'ufw', 'allow', '22'], check=True)  # SSH
         subprocess.run(['sudo', 'ufw', 'allow', '1194/udp'], check=True)  # OpenVPN
         subprocess.run(['sudo', 'ufw', 'default', 'deny'], check=True)
