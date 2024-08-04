@@ -21,14 +21,20 @@ async def main():
     Основная асинхронная функция для запуска бота и выполнения задач
     """
     # Инициализация Telegram Application
-    application = Application.builder().token(os.getenv('BOT_TOKEN')).build()
+    application = (
+        Application.builder()
+        .token(os.getenv('BOT_TOKEN'))
+        .build()
+    )
 
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_command))
 
     # Запуск бота
+    await application.initialize()
     await application.start()
+    await application.updater.start_polling()
 
     logging.info("Бот запущен и работает.")
 
@@ -41,4 +47,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
