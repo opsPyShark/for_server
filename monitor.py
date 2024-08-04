@@ -1,8 +1,21 @@
+import os
+import sys
+import subprocess
+
+# Функция для установки зависимостей
+def install_dependencies():
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing dependencies: {e}")
+        sys.exit(1)
+
+# Установка зависимостей перед запуском основного кода
+install_dependencies()
+
 import telebot
 import psutil
-import subprocess
 import time
-import os
 from dotenv import load_dotenv
 
 # Загрузка переменных окружения из файла .env
@@ -11,6 +24,11 @@ load_dotenv()
 # Получение токена и ID чата из переменных окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
+
+# Проверка, что BOT_TOKEN и CHAT_ID установлены
+if not BOT_TOKEN or not CHAT_ID:
+    print("Error: BOT_TOKEN and CHAT_ID must be set in the .env file.")
+    sys.exit(1)
 
 # Инициализация бота с использованием токена
 bot = telebot.TeleBot(BOT_TOKEN)
